@@ -4,7 +4,9 @@ import java.io.BufferedWriter;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.util.List;
+import java.util.Set;
 
+import edu.arizona.biosemantics.micropie.classify.ILabel;
 import edu.arizona.biosemantics.micropie.model.ClassifiedSentence;
 
 public class CSVClassifiedSentenceWriter implements IClassifiedSentenceWriter {
@@ -26,10 +28,20 @@ public class CSVClassifiedSentenceWriter implements IClassifiedSentenceWriter {
 		BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(outputStream));
 		
 		for(ClassifiedSentence sentence : classifiedSentences) {
-			bufferedWriter.write(sentence.getPrediction().toString() + seperator + sentence.getSentence().getText() + "\n"); 
+			
+			bufferedWriter.write(getPredicitionsString(sentence.getPredictions()) + seperator + sentence.getSentence().getText() + "\n"); 
 		}
 		bufferedWriter.flush();
 		bufferedWriter.close();
+	}
+
+	private String getPredicitionsString(Set<ILabel> predictions) {
+		StringBuilder stringBuilder = new StringBuilder();
+		for(ILabel label : predictions) {
+			stringBuilder.append(label + ",");
+		}
+		String result = stringBuilder.toString();
+		return result.substring(0, result.length() - 1);
 	}
 
 }

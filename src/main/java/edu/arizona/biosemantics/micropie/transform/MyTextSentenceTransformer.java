@@ -1,23 +1,34 @@
 package edu.arizona.biosemantics.micropie.transform;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import de.mpii.clausie.ClausIE;
 import de.mpii.clausie.Clause;
 import de.mpii.clausie.Proposition;
+import edu.arizona.biosemantics.micropie.model.ParseResult;
 import edu.arizona.biosemantics.micropie.model.Sentence;
 import edu.stanford.nlp.ling.CoreAnnotations.SentencesAnnotation;
 import edu.stanford.nlp.pipeline.Annotation;
 import edu.stanford.nlp.pipeline.StanfordCoreNLP;
+import edu.stanford.nlp.trees.GrammaticalStructure;
+import edu.stanford.nlp.trees.GrammaticalStructureFactory;
+import edu.stanford.nlp.trees.PennTreebankLanguagePack;
+import edu.stanford.nlp.trees.Tree;
+import edu.stanford.nlp.trees.TypedDependency;
 import edu.stanford.nlp.util.CoreMap;
 
 public class MyTextSentenceTransformer implements ITextSentenceTransformer {
 
 	private ClausIE clausIE;
 	private StanfordCoreNLP pipeline;
+	private Map<Sentence, ParseResult> cachedParseResults = new HashMap<Sentence, ParseResult>();
+	private PennTreebankLanguagePack pennTreebankLanguagePack;
 	
 	public MyTextSentenceTransformer() {
 		Properties stanfordCoreProperties = new Properties();
@@ -27,6 +38,8 @@ public class MyTextSentenceTransformer implements ITextSentenceTransformer {
 		this.clausIE = new ClausIE();
 		this.clausIE.initParser();
 		this.clausIE.getOptions().print(System.out, "# ");
+		
+		this.pennTreebankLanguagePack = new PennTreebankLanguagePack();
 	}
 	
 	@Override
@@ -39,6 +52,10 @@ public class MyTextSentenceTransformer implements ITextSentenceTransformer {
 			}
 		}
 		return result;
+	}
+	
+	public ParseResult getCachedParseResult(Sentence sentence) {
+		return cachedParseResults.get(sentence);
 	}
 	
 	private List<String> getSentences(String text) {
@@ -56,23 +73,40 @@ public class MyTextSentenceTransformer implements ITextSentenceTransformer {
 		List<Sentence> result = new LinkedList<Sentence>();
 		
 		clausIE.parse(text);
+		Tree dependencyTree = clausIE.getDepTree();
 		System.out.print("Dependency parse : ");
-		System.out.println(clausIE.getDepTree().pennString()
+		System.out.println(dependencyTree.pennString()
 				.replaceAll("\n", "\n                   ").trim());
-
+		
+		
 		List<String> sentenceList = new ArrayList<String>();
 		handleCaseA(text, sentenceList);
 		handleCaseB(text, sentenceList);	
 		
 		if (sentenceList.size() > 1) {
-			for (String sentenceText : sentenceList)
-				result.add(new Sentence(sentenceText));
+			for (String sentenceText : sentenceList) {
+				Sentence sentence = new Sentence(sentenceText);
+				clausIE.parse(sentenceText);
+				dependencyTree = clausIE.getDepTree();
+				cachedParseResults.put(sentence, getParseResult(dependencyTree));
+				result.add(sentence);
+			}
 		} else {
-			result.add(new Sentence(text));
+			Sentence sentence = new Sentence(text);		
+			cachedParseResults.put(sentence, getParseResult(dependencyTree));
+			result.add(sentence);
 		}
 		return result;
 	}
 	
+	private ParseResult getParseResult(Tree dependencyTree) {
+		GrammaticalStructureFactory grammaticalStructureFactory = pennTreebankLanguagePack.grammaticalStructureFactory();
+		GrammaticalStructure grammaticalStructure = grammaticalStructureFactory.newGrammaticalStructure(dependencyTree);
+		Collection<TypedDependency> typedDependencies = grammaticalStructure.typedDependenciesCollapsed();
+		ParseResult parseResult = new ParseResult(clausIE.getDepTree(), typedDependencies);
+		return parseResult;
+	}
+
 	private void handleCaseB(String text, List<String> subSentenceList) {
 		String depTreeString = clausIE.getDepTree().pennString();
 		System.out.println("depTreeString :: " + depTreeString);
